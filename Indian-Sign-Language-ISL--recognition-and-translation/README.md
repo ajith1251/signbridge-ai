@@ -86,21 +86,55 @@ writes them to `static/assets/isl_alphabet/<LETTER>.png`. The web app and both
 CLI tools read those assets — no `data/` folder or downloads are needed.
 Re-run it any time the training data changes; output is deterministic.
 
-## Bilingual foundation (Kannada, Phase 1)
+## Bilingual Text-to-ISL (English + Kannada)
 
-`bilingual.py` detects Kannada script and transliterates it to Roman letters:
+The Text-to-ISL page is fully bilingual. The pipeline is exactly:
+
+**Kannada script → Roman transliteration → ISL alphabet finger-spelling**
+
+1. You type English, Kannada, or a mix (or pick a news example).
+2. `bilingual.detect_language()` classifies the input (`en`, `kn`, or `mixed`).
+3. `bilingual.transliterate_kannada()` maps Kannada script to Roman letters
+    (rule-based, ASCII output; English letters pass through untouched).
+4. `bilingual.prepare_for_isl()` normalizes to UPPERCASE A-Z + digits + spaces.
+5. `isl_assets.build_composite()` renders the finger-spelling image sequence
+    from the locally generated A-Z alphabet assets.
+
+**Important:** this is Kannada *text* to ISL finger-spelling. It is **not**
+Kannada Sign Language (KSL) gesture recognition — the CNN recognizes ISL
+alphabet hand signs only.
+
+### Runnable examples
 
 ```text
-ನಮಸ್ಕಾರ  -> NAMASKAARA   (lang: kn)
-ಕನ್ನಡ    -> KANNADA      (lang: kn)
-ನಮಸ್ಕಾರ Hello -> NAMASKAARA HELLO (lang: mixed)
+HELLO          -> en    -> H · E · L · L · O
+ನಮಸ್ಕಾರ        -> kn    -> NAMASKAARA  -> N · A · M · A · S · K · A · A · R · A
+Hello ನಮಸ್ಕಾರ  -> mixed -> HELLO NAMASKAARA
 ```
 
-The planned feature is **Kannada text → Roman transliteration → ISL alphabet
-finger-spelling**. This module is not yet wired into the web UI. Note this is
-*not* Kannada Sign Language recognition — the CNN recognizes ISL alphabet signs
-only. The `kannada_dataset/` folder is unrelated NLP dataset code kept separate
-from the CNN training data.
+Try each in the Text-to-ISL page, or via the API:
+
+```bat
+curl -X POST http://localhost:8080/process_bilingual_text -H "Content-Type: application/json" -d "{\"text\": \"HELLO\"}"
+curl -X POST http://localhost:8080/process_bilingual_text -H "Content-Type: application/json" -d "{\"text\": "ನಮಸ್ಕಾರ"}"
+curl -X POST http://localhost:8080/process_bilingual_text -H "Content-Type: application/json" -d "{\"text\": "Hello ನಮಸ್ಕಾರ"}"
+```
+
+Each response contains `original_text`, `language`, `romanized_text`,
+`isl_sequence` (readable A-Z list with `space` markers) and the composite
+`image` URL. The English-only `/process_text` endpoint is unchanged.
+
+### Kannada news examples (optional, text-only)
+
+The Text-to-ISL page offers "Try a Kannada News Example" buttons. These load a
+few real headlines from the **optional local** `kannada_dataset/` CSV corpus
+(`train.csv` / `valid.csv` — manual download from Kaggle, see the dataset
+README). The dataset is used **only as example text input**; it is kept fully
+separate from the CNN training data and is never used to train or evaluate any
+model. When the CSVs are absent the page shows a polite empty state and manual
+Kannada input keeps working.
+
+`bilingual.py` self-tests on every run: `python bilingual.py`
 
 ## Project structure
 
@@ -108,7 +142,7 @@ from the CNN training data.
 ├── app.py                        # Main Flask application (port 8080)
 ├── isl_assets.py                 # Shared A-Z asset loading + composite builder + cleanup
 ├── generate_alphabet_assets.py   # Builds A-Z reference images from training data
-├── bilingual.py                  # Kannada detection + Roman transliteration (foundation)
+├── bilingual.py                  # Kannada detection + Roman transliteration + self-tests
 ├── train_model.py                # CNN training (5-fold CV) - do not run casually
 ├── model_analysis.py             # Evaluation, confusion matrix
 ├── predict.py / translator.py    # Desktop recognizer (pyttsx3 TTS)

@@ -165,7 +165,8 @@ def transliterate_kannada(text: str) -> str:
             # Look ahead: consonant + optional matra / virama
             if i + 1 < n and text[i + 1] == _VIRAMA:
                 # Dead consonant: bare form without inherent 'a'.
-                # A following consonant repeats it: ನ್ನ -> "nna".
+                # A following identical consonant keeps its inherent 'a':
+                # ನ್ನ -> "n" + "na" = "nna" (e.g. ಕನ್ನಡ -> kannada).
                 bare = _CONSONANTS[ch][:-1]  # drop trailing 'a'
                 j = i + 2
                 if (
@@ -173,12 +174,15 @@ def transliterate_kannada(text: str) -> str:
                     and j < n
                     and text[j] == ch
                 ):
-                    out.append(bare * 2)
-                    i = j + 1
-                    # A matra may follow the cluster: ನ್ನಾ -> "nnaa"
+                    i = j  # position on the second consonant
+                    second = _CONSONANTS[ch]  # e.g. "na"
+                    i += 1
+                    # A matra replaces the second consonant's inherent 'a':
+                    # ನ್ನಾ -> "n" + "naa" = "nnaa"
                     if i < n and text[i] in _MATRAS:
-                        out[-1] = out[-1] + _MATRAS[text[i]]
+                        second = second[:-1] + _MATRAS[text[i]]
                         i += 1
+                    out.append(bare + second)
                 else:
                     out.append(bare)
                     i += 1  # consume only the virama; next char re-parsed

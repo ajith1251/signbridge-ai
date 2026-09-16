@@ -37,30 +37,112 @@
         <section class="sb-page-head">
             <div class="sb-container">
                 <h1>Text to ISL</h1>
-                <p>Type any English or Kannada text and get a visual finger-spelling sequence, generated locally from the bundled alphabet assets.</p>
+                <p>English, Kannada, or a mix of both — the app detects the language, transliterates
+                    Kannada script to Roman letters, and builds an ISL alphabet finger-spelling sequence.
+                    Everything is generated locally.</p>
             </div>
         </section>
 
-        <!-- Text to ISL Section -->
         <section class="sb-section sb-section--tight">
             <div class="sb-container">
-                <div class="sb-card" style="max-width: 860px; margin-inline: auto;">
-                    <form class="sb-flex" onsubmit="event.preventDefault(); processText();">
-                        <div class="sb-field" style="flex:1 1 320px; margin-bottom:0;">
-                            <label class="sb-label" for="text-input">Text to translate</label>
-                            <input id="text-input" type="text" placeholder="Enter text — English or ಕನ್ನಡ"
-                                   class="sb-input kannada" autocomplete="off">
-                        </div>
-                        <div style="align-self:flex-end;">
-                            <button id="text-btn" type="submit" class="sb-btn sb-btn--primary">Convert to ISL</button>
-                        </div>
-                    </form>
-                    <p class="sb-help">Supported: A–Z letters, digits and spaces. Kannada script is transliterated automatically; other characters are skipped.</p>
+                <div class="sb-split">
+                    <!-- ============ Left: converter ============ -->
+                    <div class="sb-stack">
+                        <div class="sb-card">
+                            <div class="sb-flex sb-mb-4" style="align-items:center; justify-content:space-between;">
+                                <label class="sb-label" for="text-input" style="margin:0;">Your text</label>
+                                <div class="sb-segmented" role="group" aria-label="Language mode" id="mode-selector">
+                                    <button type="button" class="sb-segmented__btn" data-mode="auto" aria-pressed="true">Auto Detect</button>
+                                    <button type="button" class="sb-segmented__btn" data-mode="en" aria-pressed="false">English</button>
+                                    <button type="button" class="sb-segmented__btn kannada" data-mode="kn" aria-pressed="false">ಕನ್ನಡ</button>
+                                </div>
+                            </div>
 
-                    <div class="sb-mt-5">
-                        <p id="text-text" class="sb-text-center" style="font-weight:700; color:var(--sb-white);">Entered Text: None</p>
-                        <img id="text-isl-image" src="" class="sb-media sb-mt-3" style="display:none;" alt="ISL finger-spelling sequence for the entered text">
+                            <form onsubmit="event.preventDefault(); convertBilingual();">
+                                <div class="sb-field">
+                                    <label class="sb-visually-hidden" for="text-input">Text to translate</label>
+                                    <textarea id="text-input" class="sb-textarea kannada" maxlength="500"
+                                        placeholder="Type here — English, ಕನ್ನಡ, or both. Example: Hello ನಮಸ್ಕಾರ"
+                                        autocomplete="off" spellcheck="false"></textarea>
+                                    <p class="sb-help" id="mode-hint">Auto Detect — Kannada script is transliterated automatically; other characters are skipped.</p>
+                                </div>
+                                <div class="sb-flex">
+                                    <button id="text-btn" type="submit" class="sb-btn sb-btn--primary">Convert to ISL</button>
+                                    <button type="button" class="sb-btn sb-btn--ghost" onclick="clearConverter()">Clear</button>
+                                </div>
+                            </form>
+
+                            <div id="text-text" class="sb-visually-hidden" aria-live="polite"></div>
+                        </div>
+
+                        <!-- Status region -->
+                        <div id="convert-status" role="status" aria-live="polite"></div>
+
+                        <!-- Results -->
+                        <div id="result-section" style="display:none;">
+                            <div class="sb-card">
+                                <div class="sb-flex" style="align-items:center; justify-content:space-between;">
+                                    <h2 style="font-size:1.1rem; margin:0;">Result</h2>
+                                    <span id="result-lang-chip" class="sb-lang-chip sb-lang-chip--en">English</span>
+                                </div>
+
+                                <div class="sb-result-grid sb-mt-4">
+                                    <div class="sb-result">
+                                        <div class="sb-result__label">Original input</div>
+                                        <div class="sb-result__value kannada" id="result-original">—</div>
+                                    </div>
+                                    <div class="sb-result">
+                                        <div class="sb-result__label">Romanized text</div>
+                                        <div class="sb-result__value sb-result__value--mono" id="result-roman">—</div>
+                                    </div>
+                                    <div class="sb-result sb-result--wide">
+                                        <div class="sb-result__label">ISL letter sequence <span id="result-count" class="sb-muted"></span></div>
+                                        <div class="sb-letters sb-mt-3" id="result-letters" aria-label="Finger-spelling letter sequence"></div>
+                                    </div>
+                                    <div class="sb-result sb-result--wide">
+                                        <div class="sb-result__label">ISL sign sequence</div>
+                                        <img id="text-isl-image" src="" class="sb-media sb-mt-3" style="display:none;"
+                                             alt="ISL finger-spelling image sequence for the entered text">
+                                    </div>
+                                </div>
+
+                                <div class="sb-flex sb-mt-4">
+                                    <button id="copy-roman-btn" type="button" class="sb-btn sb-btn--ghost sb-btn--sm" onclick="copyRomanized()">
+                                        Copy Romanized Text
+                                    </button>
+                                    <a id="download-seq-btn" class="sb-btn sb-btn--ghost sb-btn--sm" download="signbridge-isl-sequence.png" href="#">
+                                        Download Sign Sequence
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- ============ Right: examples & help ============ -->
+                    <aside class="sb-stack">
+                        <div class="sb-bilingual" style="padding: var(--sb-space-5);">
+                            <h2 style="font-size:1.05rem; margin-bottom: var(--sb-space-2);">How Kannada works here</h2>
+                            <div class="sb-bilingual__flow" style="margin-top: var(--sb-space-3); flex-direction: column; gap: var(--sb-space-2);">
+                                <span class="sb-bilingual__kn" lang="kn" style="font-size:1.6rem;">ನಮಸ್ಕಾರ</span>
+                                <span class="sb-bilingual__arrow" aria-hidden="true">↓</span>
+                                <span class="sb-bilingual__roman" style="font-size:1rem;">NAMASKAARA</span>
+                                <span class="sb-bilingual__arrow" aria-hidden="true">↓</span>
+                                <span class="sb-bilingual__spelled" style="font-size:0.85rem;">N · A · M · A · S · K · A · A · R · A</span>
+                            </div>
+                            <p class="sb-help sb-text-center" style="margin-top: var(--sb-space-3); margin-bottom:0;">
+                                Kannada script → Roman transliteration → ISL finger-spelling.
+                                This is <strong>text translation</strong>, not Kannada Sign Language gesture recognition.
+                            </p>
+                        </div>
+
+                        <div class="sb-card">
+                            <h2 style="font-size:1.05rem;">Try a Kannada News Example</h2>
+                            <p class="sb-help">Real headlines from the optional local news corpus (text examples only).</p>
+                            <div id="news-examples" class="sb-examples sb-mt-3" aria-live="polite">
+                                <div class="sb-loading"><span class="sb-spinner" aria-hidden="true"></span> Loading examples…</div>
+                            </div>
+                        </div>
+                    </aside>
                 </div>
             </div>
         </section>
@@ -86,69 +168,183 @@
             });
         })();
 
-        // MVU pattern for theme and accessibility (functional state preserved)
-        const Model = {
-            theme: localStorage.getItem('theme') || 'light',
-            accessibility: localStorage.getItem('accessibility') === 'true',
+        // ------------------ Language mode selector ------------------
+        let currentMode = 'auto';
+        const MODE_HINTS = {
+            auto: 'Auto Detect — Kannada script is transliterated automatically; other characters are skipped.',
+            en: 'English mode — non-English letters are removed before conversion.',
+            kn: 'ಕನ್ನಡ mode — type Kannada script; it will be transliterated to Roman letters.'
         };
-        function View(model) {
-            document.body.classList.remove('accessibility-mode', 'light-theme', 'dark-theme', 'high-contrast-theme');
-            if (model.accessibility) document.body.classList.add('accessibility-mode');
-            if (model.theme === 'light') document.body.classList.add('light-theme');
-            if (model.theme === 'dark') document.body.classList.add('dark-theme');
-            if (model.theme === 'high-contrast') document.body.classList.add('high-contrast-theme');
-        }
-        function Update(msg, model) {
-            switch (msg.type) {
-                case 'SET_THEME':
-                    model.theme = msg.value;
-                    localStorage.setItem('theme', model.theme);
-                    break;
-                case 'TOGGLE_ACCESSIBILITY':
-                    model.accessibility = !model.accessibility;
-                    localStorage.setItem('accessibility', model.accessibility);
-                    break;
-            }
-            View(model);
-        }
-        // Initial render
-        View(Model);
+        document.querySelectorAll('#mode-selector .sb-segmented__btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('#mode-selector .sb-segmented__btn').forEach(function (b) {
+                    b.setAttribute('aria-pressed', 'false');
+                });
+                btn.setAttribute('aria-pressed', 'true');
+                currentMode = btn.dataset.mode;
+                document.getElementById('mode-hint').textContent = MODE_HINTS[currentMode];
+            });
+        });
 
+        // ------------------ Status helpers ------------------
+        function setStatus(html, kind) {
+            const el = document.getElementById('convert-status');
+            if (!html) { el.innerHTML = ''; return; }
+            const cls = kind === 'error' ? 'sb-alert sb-alert--error' :
+                        kind === 'success' ? 'sb-alert sb-alert--success' : 'sb-loading';
+            const spinner = kind === 'loading' ? '<span class="sb-spinner" aria-hidden="true"></span>' : '';
+            el.innerHTML = '<div class="' + cls + '">' + spinner + '<span>' + html + '</span></div>';
+        }
+
+        const LANG_LABELS = { en: 'English', kn: 'ಕನ್ನಡ Kannada', mixed: 'Mixed English + Kannada' };
+
+        function esc(s) {
+            const div = document.createElement('div');
+            div.textContent = s == null ? '' : String(s);
+            return div.innerHTML;
+        }
+
+        // ------------------ Legacy English flow (preserved) ------------------
+        // processText() is kept for compatibility; it now routes through the
+        // bilingual endpoint in English mode so both flows share one pipeline.
         function processText() {
-            const textInput = document.getElementById('text-input').value;
-            const textBtn = document.getElementById('text-btn');
-            textBtn.disabled = true;
-            textBtn.textContent = 'Processing...';
+            convertBilingual('en');
+        }
 
-            fetch('/process_text', {
+        // ------------------ Bilingual conversion ------------------
+        let lastResult = null;
+
+        function convertBilingual(forcedMode) {
+            const textInput = document.getElementById('text-input');
+            const text = textInput.value;
+            const textBtn = document.getElementById('text-btn');
+
+            if (!text.trim()) {
+                setStatus('Type some English or Kannada text first.', 'error');
+                textInput.focus();
+                return;
+            }
+
+            textBtn.disabled = true;
+            const originalLabel = textBtn.textContent;
+            textBtn.innerHTML = '<span class="sb-spinner" aria-hidden="true"></span> Converting…';
+            setStatus('Detecting language and building the finger-spelling sequence…', 'loading');
+            document.getElementById('result-section').style.display = 'none';
+
+            fetch('/process_bilingual_text', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: textInput })
+                body: JSON.stringify({ text: text, mode: forcedMode || currentMode })
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        document.getElementById('text-text').textContent = `Error: ${data.error}`;
-                        document.getElementById('text-isl-image').style.display = 'none';
-                    } else {
-                        document.getElementById('text-text').textContent = `Entered Text: ${data.text}`;
-                        const img = document.getElementById('text-isl-image');
-                        img.src = data.image;
-                        img.style.display = '';
-                        if (Model.accessibility && typeof speak === 'function') {
-                            speak(`Entered text: ${data.text}`);
-                        }
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok) {
+                        setStatus(esc(data.error || 'Conversion failed.'), 'error');
+                        return;
                     }
+                    lastResult = data;
+                    showResult(data);
+                    setStatus('Sequence ready — ' + data.length + ' letters to finger-spell.', 'success');
                 })
-                .catch(error => {
-                    document.getElementById('text-text').textContent = `Error: ${error}`;
-                    document.getElementById('text-isl-image').style.display = 'none';
-                })
+                .catch(() => setStatus('Could not reach the server. Is the app still running?', 'error'))
                 .finally(() => {
                     textBtn.disabled = false;
-                    textBtn.textContent = 'Convert to ISL';
+                    textBtn.textContent = originalLabel;
                 });
         }
+
+        function showResult(data) {
+            document.getElementById('result-original').textContent = data.original_text;
+            document.getElementById('result-roman').textContent = data.romanized_text;
+
+            const chip = document.getElementById('result-lang-chip');
+            chip.textContent = LANG_LABELS[data.language] || data.language;
+            chip.className = 'sb-lang-chip sb-lang-chip--' + data.language;
+
+            const letters = document.getElementById('result-letters');
+            letters.innerHTML = data.isl_sequence.map(function (s) {
+                return s === 'space'
+                    ? '<span class="sb-letter-tile sb-letter-tile--space" aria-label="word break"></span>'
+                    : '<span class="sb-letter-tile">' + esc(s) + '</span>';
+            }).join('');
+
+            const img = document.getElementById('text-isl-image');
+            img.src = data.image;
+            img.style.display = '';
+            img.alt = 'ISL finger-spelling sequence for: ' + data.romanized_text;
+
+            const download = document.getElementById('download-seq-btn');
+            download.href = data.image;
+            download.setAttribute('download', 'signbridge-isl-' + data.romanized_text.slice(0, 12).replace(/[^A-Z0-9]/gi, '_') + '.png');
+
+            document.getElementById('result-count').textContent = '· ' + data.length + ' letters';
+            document.getElementById('result-section').style.display = '';
+            document.getElementById('text-text').textContent = 'Entered Text: ' + data.romanized_text;
+        }
+
+        function clearConverter() {
+            document.getElementById('text-input').value = '';
+            document.getElementById('result-section').style.display = 'none';
+            setStatus('');
+            document.getElementById('text-input').focus();
+        }
+
+        // ------------------ Actions ------------------
+        function copyRomanized() {
+            if (!lastResult) return;
+            const done = function () {
+                const btn = document.getElementById('copy-roman-btn');
+                const old = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(function () { btn.textContent = old; }, 1600);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(lastResult.romanized_text).then(done).catch(function () { fallbackCopy(done); });
+            } else {
+                fallbackCopy(done);
+            }
+        }
+
+        function fallbackCopy(done) {
+            const ta = document.createElement('textarea');
+            ta.value = lastResult.romanized_text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) { /* clipboard unavailable */ }
+            document.body.removeChild(ta);
+        }
+
+        // ------------------ Kannada news examples ------------------
+        function loadNewsExamples() {
+            const container = document.getElementById('news-examples');
+            fetch('/kannada_news_examples')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.available || !data.examples.length) {
+                        container.innerHTML = '<p class="sb-help" style="margin:0;">' + esc(data.message) + '</p>';
+                        return;
+                    }
+                    container.innerHTML = data.examples.map(function (ex) {
+                        return '<button type="button" class="sb-example-btn" data-text="' + esc(ex.headline) + '">' +
+                            '<span class="kannada">' + esc(ex.headline) + '</span>' +
+                            '<span class="sb-example-btn__meta">from ' + esc(ex.source) + ' — click to convert</span>' +
+                            '</button>';
+                    }).join('');
+                    container.querySelectorAll('.sb-example-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            document.getElementById('text-input').value = btn.dataset.text;
+                            convertBilingual();
+                        });
+                    });
+                })
+                .catch(function () {
+                    container.innerHTML = '<p class="sb-help" style="margin:0;">Examples are unavailable right now — manual input above still works fully.</p>';
+                });
+        }
+
+        loadNewsExamples();
     </script>
 </body>
 </html>

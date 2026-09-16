@@ -37,52 +37,115 @@
         <section class="sb-page-head">
             <div class="sb-container">
                 <h1>Live AI Recognition</h1>
-                <p>Hold a static ISL alphabet sign inside the green box. The camera runs locally — frames never leave your machine.</p>
+                <p>Watch the CNN classify your ISL alphabet signs in real time — every prediction, its confidence,
+                    and the letters it accepts. Recognition varies with lighting, background, and camera quality.</p>
             </div>
         </section>
 
-        <!-- Live Recognition Section -->
         <section class="sb-section sb-section--tight">
             <div class="sb-container">
-                <div class="sb-split">
-                    <!-- Camera panel -->
-                    <div class="sb-card">
-                        <div id="camera-controls" class="sb-flex sb-flex--center sb-mb-4">
-                            <button id="start-btn" class="sb-btn sb-btn--primary" onclick="startCamera()">Start Camera</button>
-                        </div>
-                        <div id="detection-section" style="display:none;">
-                            <div class="sb-mb-4" style="position:relative;">
-                                <img src="" class="sb-media" id="video-feed" alt="Live webcam feed showing your hand sign inside the detection box">
-                                <span class="sb-chip sb-chip--neutral" style="position:absolute; top:10px; left:50%; transform:translateX(-50%);">
-                                    Hold the sign steady for ~2s to add to the word
-                                </span>
-                            </div>
-                            <p id="prediction" class="sb-text-center" style="font-size:1.15rem; font-weight:700; color:var(--sb-white);"></p>
-                            <div class="sb-mb-3">
-                                <div class="sb-progress" role="progressbar" aria-label="Prediction confidence" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="confidence-progress">
-                                    <div id="confidence-bar" class="sb-progress__bar"></div>
+                <div class="sb-split sb-dash" style="grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);">
+                    <!-- ============ Left: camera + AI result ============ -->
+                    <div class="sb-stack">
+                        <div class="sb-card">
+                            <!-- Loading / start state -->
+                            <div id="camera-controls" class="sb-stack sb-text-center">
+                                <div class="sb-loading" style="justify-content:center; border-style:dashed; background:rgba(255,255,255,0.03);">
+                                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg>
+                                    <span>Camera is off — the video feed and AI start when you press the button.</span>
                                 </div>
-                                <p id="confidence-text" class="sb-text-center sb-muted sb-help">Confidence: 0%</p>
+                                <button id="start-btn" class="sb-btn sb-btn--primary" onclick="startCamera()">Start Camera</button>
                             </div>
-                            <div class="sb-text-center">
-                                <button id="stop-btn" onclick="stopCamera()" class="sb-btn sb-btn--danger">Stop Camera</button>
+
+                            <div id="detection-section" style="display:none;">
+                                <div class="sb-mb-4" style="position:relative;">
+                                    <img src="" class="sb-media" id="video-feed" alt="Live webcam feed showing your hand sign inside the detection box">
+                                    <span id="roi-hint" class="sb-chip sb-chip--neutral" style="position:absolute; top:10px; left:50%; transform:translateX(-50%);">
+                                        Keep your hand inside the green box
+                                    </span>
+                                </div>
+
+                                <!-- AI result panel -->
+                                <div class="sb-card" style="background: rgba(255,255,255,0.03);">
+                                    <div style="display:flex; align-items:center; gap: var(--sb-space-4); flex-wrap: wrap;">
+                                        <div id="ai-letter" class="sb-ai-letter sb-ai-letter--none" aria-hidden="true">?</div>
+                                        <div style="flex:1 1 200px;">
+                                            <div style="display:flex; align-items:center; justify-content:space-between; gap: var(--sb-space-3); flex-wrap:wrap;">
+                                                <span id="status-badge" class="sb-status sb-status--camera_off" role="status" aria-live="polite">Camera ready</span>
+                                                <span id="confidence-text" class="sb-top3__pct" style="font-size:1rem;">0.0%</span>
+                                            </div>
+                                            <div class="sb-progress sb-mt-3" role="progressbar" aria-label="CNN confidence for the accepted letter"
+                                                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="confidence-progress">
+                                                <div id="confidence-bar" class="sb-progress__bar"></div>
+                                            </div>
+                                            <p id="prediction" class="sb-help sb-mt-3" aria-live="polite">Prediction: None</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="sb-flex sb-mt-4" style="justify-content:center;">
+                                    <button id="stop-btn" onclick="stopCamera()" class="sb-btn sb-btn--danger">Stop Camera</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Word building panel -->
+                        <div class="sb-card">
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap: var(--sb-space-3); flex-wrap:wrap;">
+                                <h2 style="font-size:1.05rem; margin:0;">Word building</h2>
+                                <button id="clear-word-btn" type="button" class="sb-btn sb-btn--ghost sb-btn--sm" onclick="clearWord()">Clear word</button>
+                            </div>
+                            <p class="sb-help">Confident letters are appended automatically. Hold a letter ~2 seconds to repeat it.</p>
+                            <div id="word-buffer" class="sb-wordbox sb-wordbox--empty" aria-live="polite">No letters yet</div>
+                            <div id="sentence-panel" class="sb-mt-3" style="display:none;">
+                                <div class="sb-result__label">Completed word</div>
+                                <div id="sentence-text" class="sb-sentence"></div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Side panel -->
+                    <!-- ============ Right: Top-3 + explanation + tips ============ -->
                     <aside class="sb-stack">
                         <div class="sb-card">
-                            <h2 style="font-size:1.05rem;">Prediction history</h2>
-                            <ul id="history-list" class="sb-list sb-mt-3" aria-live="polite"></ul>
+                            <h2 style="font-size:1.05rem; margin-bottom:0;">Top 3 CNN Predictions</h2>
+                            <p class="sb-help">CNN confidence scores — not a guarantee of correctness.</p>
+                            <div id="top3-list" class="sb-top3 sb-mt-3" aria-live="polite">
+                                <div class="sb-top3__row sb-top3__row--dim">
+                                    <span class="sb-top3__letter">–</span>
+                                    <div class="sb-progress" style="height:8px;"><div class="sb-progress__bar" style="width:0%"></div></div>
+                                    <span class="sb-top3__pct">—</span>
+                                </div>
+                                <div class="sb-top3__row sb-top3__row--dim">
+                                    <span class="sb-top3__letter">–</span>
+                                    <div class="sb-progress" style="height:8px;"><div class="sb-progress__bar" style="width:0%"></div></div>
+                                    <span class="sb-top3__pct">—</span>
+                                </div>
+                                <div class="sb-top3__row sb-top3__row--dim">
+                                    <span class="sb-top3__letter">–</span>
+                                    <div class="sb-progress" style="height:8px;"><div class="sb-progress__bar" style="width:0%"></div></div>
+                                    <span class="sb-top3__pct">—</span>
+                                </div>
+                            </div>
                         </div>
+
                         <div class="sb-card">
-                            <h2 style="font-size:1.05rem;">Tips for better accuracy</h2>
+                            <h2 style="font-size:1.05rem;">How the AI sees your sign</h2>
+                            <ol class="sb-howto sb-mt-3">
+                                <li>Camera detects your hand region</li>
+                                <li>Image becomes grayscale and resizes to 50 × 50 pixels</li>
+                                <li>CNN predicts one of 26 alphabet letters</li>
+                                <li>The app accepts only confident predictions</li>
+                            </ol>
+                        </div>
+
+                        <div class="sb-card">
+                            <h2 style="font-size:1.05rem;">Demo tips</h2>
                             <ul class="sb-list sb-mt-3 sb-muted" style="font-size:0.92rem;">
-                                <li class="sb-list__item">Face the camera with your palm visible</li>
-                                <li class="sb-list__item">Keep your hand inside the green box</li>
-                                <li class="sb-list__item">Use even, front lighting</li>
-                                <li class="sb-list__item">Plain backgrounds work best</li>
+                                <li class="sb-list__item">Use a plain background</li>
+                                <li class="sb-list__item">Keep your hand inside the guide box</li>
+                                <li class="sb-list__item">Use good lighting</li>
+                                <li class="sb-list__item">Hold the sign steady briefly</li>
+                                <li class="sb-list__item">Check the <a href="/tutorial">tutorial</a> for the correct hand shape</li>
                             </ul>
                         </div>
                     </aside>
@@ -111,67 +174,157 @@
             });
         })();
 
+        // ------------------ Camera lifecycle ------------------
         let cameraStarted = false;
         let updateInterval = null;
+        let sessionGen = 0; // incremented on every start/stop so stale
+                            // in-flight poll responses can never render
+
         function startCamera() {
+            if (cameraStarted) return; // avoid duplicate stream requests
+            cameraStarted = true;
+            const gen = ++sessionGen;
             document.getElementById('video-feed').src = '/video_feed';
             document.getElementById('detection-section').style.display = '';
             document.getElementById('camera-controls').style.display = 'none';
-            cameraStarted = true;
-            updateInterval = setInterval(updatePrediction, 5000);
+            setStatus('detecting', 'Starting camera…');
+            updatePrediction(gen);
+            updateInterval = setInterval(() => updatePrediction(gen), 1200);
         }
+
         function stopCamera() {
+            const gen = ++sessionGen;
             fetch('/stop_camera').then(() => {
-                document.getElementById('video-feed').src = '';
-                document.getElementById('prediction').textContent = 'Prediction: None';
-                document.getElementById('confidence-bar').style.width = '0%';
-                document.getElementById('confidence-progress').setAttribute('aria-valuenow', '0');
-                document.getElementById('confidence-text').textContent = 'Confidence: 0%';
-                document.getElementById('detection-section').style.display = 'none';
-                document.getElementById('camera-controls').style.display = '';
                 cameraStarted = false;
                 if (updateInterval) clearInterval(updateInterval);
+                document.getElementById('video-feed').src = '';
+                document.getElementById('detection-section').style.display = 'none';
+                document.getElementById('camera-controls').style.display = '';
+                setStatus('camera_off', 'Camera off — press Start Camera to begin.');
+                setLetter(null, 0);
+                setTop3([]);
+                setWordBuffer('', '');
             });
         }
+
         function clearWord() {
             fetch('/clear_word', { method: 'POST' })
-                .then(response => response.json())
+                .then(r => r.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        const fw = document.getElementById('formed-word');
-                        if (fw) fw.textContent = 'Word: None';
                         lastWord = '';
+                        setWordBuffer('', '');
                     }
-                });
-        }
-        let lastWord = '';
-        function updatePrediction() {
-            fetch('/get_prediction')
-                .then(response => response.json())
-                .then(data => {
-                    const predictionEl = document.getElementById('prediction');
-                    predictionEl.textContent = data.current;
-
-                    const confidenceBar = document.getElementById('confidence-bar');
-                    const confidenceText = document.getElementById('confidence-text');
-                    const confidenceProgress = document.getElementById('confidence-progress');
-                    const confidence = data.confidence;
-                    confidenceBar.style.width = `${confidence}%`;
-                    confidenceProgress.setAttribute('aria-valuenow', String(Math.round(confidence)));
-                    confidenceText.textContent = `Confidence: ${confidence.toFixed(1)}%`;
-
-                    const historyList = document.getElementById('history-list');
-                    historyList.innerHTML = data.history.length ?
-                        data.history.map(item => `<li class="sb-list__item">${item}</li>`).join('') :
-                        '<li class="sb-list__item">No predictions yet</li>';
-
-                    const wordEl = document.getElementById('formed-word');
-                    if (wordEl) {
-                        wordEl.textContent = `Word: ${data.word || 'None'}`;
-                    }
-                    lastWord = data.word || '';
                 })
-                .catch(() => { /* transient network error - next poll retries */ });
+                .catch(() => { /* transient - next poll refreshes */ });
+        }
+
+        // ------------------ Dashboard rendering ------------------
+        const STATUS_LABELS = {
+            ready:          'Camera ready',
+            detecting:      'Great sign detected',
+            no_hand:        'No hand detected',
+            low_confidence: 'Hold steady',
+            camera_off:     'Camera off',
+            error:          'Camera error'
+        };
+
+        function setStatus(status, fallbackMessage, message) {
+            const badge = document.getElementById('status-badge');
+            badge.className = 'sb-status sb-status--' + (STATUS_LABELS[status] ? status : 'camera_off');
+            badge.textContent = message || STATUS_LABELS[status] || 'Camera ready';
+        }
+
+        function setLetter(letter, confidence) {
+            const el = document.getElementById('ai-letter');
+            if (letter) {
+                el.textContent = letter;
+                el.classList.remove('sb-ai-letter--none');
+            } else {
+                el.textContent = '?';
+                el.classList.add('sb-ai-letter--none');
+            }
+            const pct = Math.max(0, Math.min(100, confidence || 0));
+            document.getElementById('confidence-bar').style.width = pct + '%';
+            document.getElementById('confidence-progress').setAttribute('aria-valuenow', String(Math.round(pct)));
+            document.getElementById('confidence-text').textContent = pct.toFixed(1) + '%';
+        }
+
+        function setTop3(top) {
+            const list = document.getElementById('top3-list');
+            const rows = [];
+            for (let i = 0; i < 3; i++) {
+                const item = top && top[i];
+                if (item) {
+                    rows.push(
+                        '<div class="sb-top3__row">' +
+                        '<span class="sb-top3__letter">' + item.letter + '</span>' +
+                        '<div class="sb-progress" style="height:8px;"><div class="sb-progress__bar" style="width:' + item.confidence + '%"></div></div>' +
+                        '<span class="sb-top3__pct">' + item.confidence.toFixed(1) + '%</span>' +
+                        '</div>');
+                } else {
+                    rows.push(
+                        '<div class="sb-top3__row sb-top3__row--dim">' +
+                        '<span class="sb-top3__letter">–</span>' +
+                        '<div class="sb-progress" style="height:8px;"><div class="sb-progress__bar" style="width:0%"></div></div>' +
+                        '<span class="sb-top3__pct">—</span>' +
+                        '</div>');
+                }
+            }
+            list.innerHTML = rows.join('');
+        }
+
+        function setWordBuffer(buffer, sentence) {
+            const box = document.getElementById('word-buffer');
+            if (buffer) {
+                box.textContent = buffer;
+                box.classList.remove('sb-wordbox--empty');
+            } else {
+                box.textContent = 'No letters yet';
+                box.classList.add('sb-wordbox--empty');
+            }
+            const panel = document.getElementById('sentence-panel');
+            const text = document.getElementById('sentence-text');
+            if (sentence) {
+                text.textContent = sentence;
+                panel.style.display = '';
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+
+        // ------------------ Polling (structured API) ------------------
+        let lastWord = '';
+        function updatePrediction(gen) {
+            fetch('/api/prediction')
+                .then(r => r.json())
+                .then(data => {
+                    // Drop responses from a superseded camera session so a
+                    // stale poll can never overwrite Start/Stop state.
+                    if (gen !== undefined && gen !== sessionGen) return;
+
+                    // Status badge + message
+                    setStatus(data.status, null, data.message);
+
+                    // Letter + confidence only meaningful when the CNN accepted a sign
+                    if (data.status === 'detecting' && data.letter) {
+                        setLetter(data.letter, data.confidence);
+                        document.getElementById('prediction').textContent =
+                            'Prediction: ' + data.letter + ' (' + data.confidence.toFixed(1) + '%)';
+                    } else if (data.status === 'low_confidence') {
+                        setLetter(null, data.confidence);
+                        document.getElementById('prediction').textContent = 'Prediction: Low Confidence';
+                    } else if (data.status === 'no_hand' || data.status === 'camera_off' || data.status === 'error') {
+                        setLetter(null, 0);
+                        document.getElementById('prediction').textContent =
+                            data.status === 'no_hand' ? 'Prediction: No Hand Detected' : 'Prediction: —';
+                    }
+
+                    setTop3(data.top_predictions || []);
+                    setWordBuffer(data.word_buffer || '', data.sentence || '');
+                    lastWord = data.word_buffer || '';
+                })
+                .catch(() => { /* transient network hiccup - next poll retries */ });
         }
     </script>
 </body>

@@ -20,6 +20,14 @@ except ImportError:
 
 app = Flask(__name__)
 
+# Kannada news CSV location (optional examples corpus - NOT CNN training data).
+# Supports both the nested folder and a sibling top-level folder layout.
+_KANNADA_NEWS_DIRS = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'kannada_dataset'),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'kannada_dataset'),
+]
+_KANNADA_NEWS_FILES = ['train.csv', 'valid.csv']
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -55,6 +63,41 @@ lock = threading.Lock()
 COMMON_WORDS = ['HELLO', 'THANK', 'YOU', 'GOOD', 'BYE']
 predicted_sentence = ''
 NAVIGATION_GESTURES = {'N': 'next', 'B': 'back', 'S': 'submit'}
+
+# --- Structured prediction state (Phase 4) -------------------------------
+# Populated directly from CNN inference inside generate_frames(); read by
+# GET /api/prediction. Never parsed back from the human-readable string.
+ACCEPT_CONFIDENCE = 0.70   # acceptance threshold for a "confident" sign
+LOW_CONFIDENCE = 0.45      # below this: treated as noise / hold steady
+
+prediction_state = {
+    'status': 'ready',            # ready|detecting|no_hand|low_confidence|camera_off|error
+    'letter': None,               # accepted letter or None
+    'confidence': 0.0,            # 0-100 (top-1 confidence from the CNN)
+    'top_predictions': [],        # [{letter, confidence}, ...] top-3
+    'word_buffer': '',            # letters accumulated so far
+    'sentence': '',               # completed COMMON word, if any
+    'timestamp': None,            # epoch seconds of last update
+    'message': 'Camera ready — press Start Camera to begin.',
+}
+
+
+def _update_prediction_state(status, letter=None, confidence=0.0, top=None,
+                             message=None):
+    """Write one snapshot of recognition state under the global lock."""
+    prediction_state.update({
+        'status': status,
+        'letter': letter,
+        'confidence': round(float(confidence) * 100.0, 1),
+        'top_predictions': top or [],
+        'word_buffer': ''.join(word),
+        'sentence': predicted_sentence,
+        'timestamp': time.time(),
+    })
+    if message:
+        prediction_state['message'] = message
+
+# --- end Phase 4 state ----------------------------------------------------
 
 # Tutorial configuration
 TUTORIAL_STEPS = [
@@ -104,6 +147,7 @@ from isl_assets import (
     missing_assets,
     cleanup_old_outputs,
 )
+import bilingual
 
 # ISL_LABELS below keeps the original in-module definition; isl_assets agrees.
 assert _ISL_LABELS == ISL_LABELS
@@ -182,9 +226,15 @@ def generate_frames():
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             logger.error("Failed to open webcam")
+            with lock:
+                _update_prediction_state('error', message='Webcam unavailable — check that a camera is connected and not in use by another app.')
             return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    # MJPEG generator started -> camera is live
+    with lock:
+        _update_prediction_state('detecting', message='Camera live — show a sign in the green box.')
 
     while True:
         with lock:
@@ -193,6 +243,7 @@ def generate_frames():
             ret, frame = cap.read()
             if not ret:
                 logger.error("Failed to capture frame")
+                _update_prediction_state('error', message='Camera frame could not be read — try stopping and starting again.')
                 break
         frame = cv2.flip(frame, 1)
         height, width = frame.shape[:2]
@@ -212,8 +263,17 @@ def generate_frames():
             prediction = model.predict(gray, verbose=0)
             predicted_class = np.argmax(prediction)
             confidence = np.max(prediction)
+
+            # Top-3 straight from the raw softmax output (never re-parsed
+            # from display strings).
+            top_idx = np.argsort(prediction[0])[::-1][:3]
+            top_predictions = [
+                {'letter': ISL_LABELS[int(i)], 'confidence': round(float(prediction[0][int(i)]) * 100.0, 1)}
+                for i in top_idx
+            ]
+
             with lock:
-                if confidence > 0.7:
+                if confidence > ACCEPT_CONFIDENCE:
                     current_pred = ISL_LABELS[predicted_class]
                     current_prediction = f"Prediction: {current_pred} ({confidence*100:.1f}%)"
                     prediction_history.append(f"{current_pred} ({confidence*100:.1f}%)")
@@ -226,17 +286,29 @@ def generate_frames():
                         predicted_sentence = ''.join(word)
                         word.clear()
                         logger.info(f"Sentence predicted: {predicted_sentence}")
+                    _update_prediction_state(
+                        'detecting', letter=current_pred, confidence=confidence,
+                        top=top_predictions, message='Great sign detected')
                     if current_pred in NAVIGATION_GESTURES:
                         action = NAVIGATION_GESTURES[current_pred]
+                elif confidence > LOW_CONFIDENCE:
+                    current_prediction = "Prediction: Low Confidence"
+                    last_prediction = None
+                    _update_prediction_state(
+                        'low_confidence', confidence=confidence,
+                        top=top_predictions, message='Hold steady — sign not clear enough yet')
                 else:
                     current_prediction = "Prediction: Low Confidence"
                     last_prediction = None
-                    logger.info(f"Hand detected - Low confidence: {confidence:.3f}")
+                    _update_prediction_state(
+                        'low_confidence', confidence=confidence,
+                        top=top_predictions, message='Hold steady — the sign is too unclear')
         else:
             with lock:
                 current_prediction = "Prediction: No Hand Detected"
                 last_prediction = None
-                logger.info("No hand detected")
+                _update_prediction_state(
+                    'no_hand', message='No hand detected — show your hand in the green box')
         cv2.putText(frame, "Show ISL sign in the green box", (50, height - 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -308,7 +380,30 @@ def stop_camera():
             cap.release()
             cap = None
             logger.info("Camera stopped")
+        _update_prediction_state(
+            'camera_off', message='Camera off — press Start Camera to begin.')
     return "Camera stopped"
+
+@app.route('/api/prediction')
+def api_prediction():
+    """
+    Structured, machine-readable recognition state for the dashboard UI.
+    Values come directly from CNN inference in generate_frames() - the
+    human-readable prediction string is never parsed.
+
+    status: ready | detecting | no_hand | low_confidence | camera_off | error
+    """
+    with lock:
+        return jsonify({
+            'status': prediction_state['status'],
+            'letter': prediction_state['letter'],
+            'confidence': prediction_state['confidence'],
+            'top_predictions': prediction_state['top_predictions'],
+            'word_buffer': prediction_state['word_buffer'],
+            'sentence': prediction_state['sentence'],
+            'timestamp': prediction_state['timestamp'],
+            'message': prediction_state['message'],
+        })
 
 @app.route('/process_speech', methods=['POST'])
 def process_speech():
@@ -337,6 +432,105 @@ def process_text():
     if output_file:
         return jsonify({'text': cleaned_text, 'image': f'/static/isl_output/{output_file}'})
     return jsonify({'error': 'No valid ISL images generated'}), 400
+
+@app.route('/process_bilingual_text', methods=['POST'])
+def process_bilingual_text():
+    """
+    Bilingual Text-to-ISL: English, Kannada or mixed text ->
+    Roman transliteration -> ISL alphabet finger-spelling sequence.
+
+    This is Kannada *text* to ISL finger-spelling - it is NOT Kannada Sign
+    Language gesture recognition.
+    Request JSON:  {"text": "<any unicode text>", "mode": "auto"|"en"|"kn"}
+    Response JSON: {original_text, language, romanized_text, isl_sequence,
+                    image, length}
+    Errors:        400 with {"error": "..."} on empty or unsupported input.
+    """
+    data = request.get_json(silent=True) or {}
+    text = (data.get('text') or '').strip()
+    mode = (data.get('mode') or 'auto').lower()
+
+    if not text:
+        return jsonify({'error': 'No text provided. Type English or Kannada text first.'}), 400
+    if len(text) > 500:
+        return jsonify({'error': 'Text too long (maximum 500 characters).'}), 400
+    if mode not in ('auto', 'en', 'kn'):
+        return jsonify({'error': f'Unknown mode: {mode}. Use auto, en or kn.'}), 400
+
+    # Force an explicit mode by preprocessing the text for that script.
+    if mode == 'en':
+        language = 'en'
+        # Strip non-Latin characters; keep A-Z a-z digits spaces.
+        latin_only = ''.join(ch for ch in text if ch in string.ascii_letters + string.digits + ' ')
+        roman_text = latin_only.strip().upper()
+    elif mode == 'kn':
+        language = 'kn'
+        roman_text, _ = bilingual.prepare_for_isl(text)
+        if not bilingual._KANNADA_RE.search(text):
+            return jsonify({'error': 'Kannada mode selected, but the text contains no Kannada script. Switch to Auto Detect or English.'}), 400
+    else:
+        roman_text, language = bilingual.prepare_for_isl(text)
+    if not roman_text or not any(ch.isalnum() for ch in roman_text):
+        return jsonify({'error': 'No finger-spellable characters found (A-Z). Unsupported characters were removed.'}), 400
+    sequence = bilingual.isl_letter_sequence(roman_text)
+    output_file = generate_isl_image(roman_text)
+    if not output_file:
+        return jsonify({'error': 'Could not generate the ISL image sequence.'}), 500
+    return jsonify({
+        'original_text': text,
+        'language': language,
+        'romanized_text': roman_text,
+        'isl_sequence': sequence,
+        'image': f'/static/isl_output/{output_file}',
+        'length': len([s for s in sequence if s != 'space'])
+    })
+
+@app.route('/kannada_news_examples')
+def kannada_news_examples():
+    """
+    Return a small sample of real Kannada headlines from the optional local
+    kannada_dataset CSV files (text examples only - never model training data).
+    Returns {"available": false, "message": ...} when the corpus is absent.
+    """
+    base_dir = None
+    for candidate in _KANNADA_NEWS_DIRS:
+        candidate = os.path.abspath(candidate)
+        if os.path.isdir(candidate) and any(
+            os.path.isfile(os.path.join(candidate, f)) for f in _KANNADA_NEWS_FILES
+        ):
+            base_dir = candidate
+            break
+    if base_dir is None:
+        return jsonify({
+            'available': False,
+            'message': 'The optional Kannada news corpus is not installed locally. '
+                       'You can still type any Kannada text above.',
+            'examples': []
+        })
+    import csv
+    import random
+    examples = []
+    for filename in _KANNADA_NEWS_FILES:
+        path = os.path.join(base_dir, filename)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding='utf-8', newline='') as f:
+                reader = csv.reader(f)
+                rows = [row[0] for row in reader if row and row[0].strip()]
+            # Skip header if present (first cell often 'headline')
+            if rows and rows[0].lower().strip() in ('headline', 'text'):
+                rows = rows[1:]
+            sample = random.sample(rows, min(3, len(rows)))
+            examples.extend({'headline': h.strip(), 'source': filename} for h in sample)
+        except (OSError, UnicodeDecodeError, csv.Error) as e:
+            logger.warning(f'Could not read Kannada news file {filename}: {e}')
+    if not examples:
+        return jsonify({'available': False,
+                        'message': 'Kannada news files were found but could not be read.',
+                        'examples': []})
+    random.shuffle(examples)
+    return jsonify({'available': True, 'message': '', 'examples': examples[:3]})
 
 @app.route('/submit_feedback', methods=['POST'])
 def submit_feedback():
