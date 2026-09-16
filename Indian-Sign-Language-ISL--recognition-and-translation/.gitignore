@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Data files
+*.npy
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.csv
+*.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# Environment variables
+.env
+
+# Custom
+THRESHOLD
+0
+confusion_matrix.png
+model.h5
+feedback.json
+X_train.npy
+y_train.npy
+
+# Runtime outputs and logs
+server.log
+*.log
+training_history.png
+
+# Generated finger-spelling images (runtime artifacts; keep repo-shipped samples)
+static/isl_output/isl_*
+
+# Virtualenv aliases sometimes created by tooling
+.venv/
+
+# Tool caches (huggingface, etc.)
+.cache/
+
+# Python bytecode
+__pycache__/

@@ -1,0 +1,44 @@
+# SignBridge AI - Python 3.13 compatible requirements
+# Install with: pip install -r requirements.txt
+
+# --- Web application ---
+Flask>=3.1
+Flask-Cors>=6.0
+
+# --- Deep learning ---
+# TensorFlow 2.21+ ships Keras 3 and supports Python 3.13 on Windows (CPU).
+tensorflow>=2.21
+Keras>=3.15
+
+# --- Computer vision / imaging ---
+opencv-python>=5.0
+Pillow>=12.0
+
+# --- Numeric / plotting ---
+numpy>=2.5
+matplotlib>=3.11
+scipy>=1.18
+
+# --- NLP utilities ---
+# punkt tokenizer download happens at import of text_splitter.py (optional utility)
+nltk>=3.9
+
+# --- Text-to-speech (offline desktop recognizer) ---
+pyttsx3>=2.99
+
+# --- Speech recognition (speech_to_isl.py CLI) ---
+SpeechRecognition>=3.14
+
+# --- ML evaluation (model_analysis.py) ---
+scikit-learn>=1.7
+seaborn>=0.13
+
+# --- Optional sentiment-analysis feature (auto-disabled if absent) ---
+# app.py imports these inside a try/except and degrades gracefully; install to enable
+# the /submit_feedback sentiment tagging.
+transformers>=4.57
+torch>=2.9
+
+# --- Misc runtime ---
+PyYAML>=6.0
+six>=1.17

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Recognition | SignBridge AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/signbridge.css') }}">
+</head>
+<body>
+    <!-- Navbar -->
+    <header class="sb-nav">
+        <div class="sb-container sb-nav__inner">
+            <a class="sb-brand" href="/" aria-label="SignBridge AI home">
+                <span class="sb-brand__mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V6a1.5 1.5 0 0 1 3 0v4"/><path d="M10 10V4.5a1.5 1.5 0 0 1 3 0V10"/><path d="M13 10.5V6a1.5 1.5 0 0 1 3 0v6"/><path d="M16 12v-2a1.5 1.5 0 0 1 3 0v4a7 7 0 0 1-7 7h-1a7 7 0 0 1-7-7v-3a1.5 1.5 0 0 1 3 0"/></svg>
+                </span>
+                <span>SignBridge AI<span class="sb-brand__tag">Learn · Sign · Connect</span></span>
+            </a>
+            <nav aria-label="Primary">
+                <button class="sb-nav__toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation menu">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                </button>
+                <ul class="sb-nav__links" id="nav-links">
+                    <li><a class="sb-nav__link" href="/">Home</a></li>
+                    <li><a class="sb-nav__link" href="/isl_detection" aria-current="page">Live Recognition</a></li>
+                    <li><a class="sb-nav__link" href="/text_to_isl">Text to ISL</a></li>
+                    <li><a class="sb-nav__link" href="/speech_to_isl">Speech to ISL</a></li>
+                    <li><a class="sb-nav__link" href="/tutorial">Tutorial</a></li>
+                    <li><a class="sb-nav__link" href="/feedback">Feedback</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Page head -->
+        <section class="sb-page-head">
+            <div class="sb-container">
+                <h1>Live AI Recognition</h1>
+                <p>Hold a static ISL alphabet sign inside the green box. The camera runs locally — frames never leave your machine.</p>
+            </div>
+        </section>
+
+        <!-- Live Recognition Section -->
+        <section class="sb-section sb-section--tight">
+            <div class="sb-container">
+                <div class="sb-split">
+                    <!-- Camera panel -->
+                    <div class="sb-card">
+                        <div id="camera-controls" class="sb-flex sb-flex--center sb-mb-4">
+                            <button id="start-btn" class="sb-btn sb-btn--primary" onclick="startCamera()">Start Camera</button>
+                        </div>
+                        <div id="detection-section" style="display:none;">
+                            <div class="sb-mb-4" style="position:relative;">
+                                <img src="" class="sb-media" id="video-feed" alt="Live webcam feed showing your hand sign inside the detection box">
+                                <span class="sb-chip sb-chip--neutral" style="position:absolute; top:10px; left:50%; transform:translateX(-50%);">
+                                    Hold the sign steady for ~2s to add to the word
+                                </span>
+                            </div>
+                            <p id="prediction" class="sb-text-center" style="font-size:1.15rem; font-weight:700; color:var(--sb-white);"></p>
+                            <div class="sb-mb-3">
+                                <div class="sb-progress" role="progressbar" aria-label="Prediction confidence" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="confidence-progress">
+                                    <div id="confidence-bar" class="sb-progress__bar"></div>
+                                </div>
+                                <p id="confidence-text" class="sb-text-center sb-muted sb-help">Confidence: 0%</p>
+                            </div>
+                            <div class="sb-text-center">
+                                <button id="stop-btn" onclick="stopCamera()" class="sb-btn sb-btn--danger">Stop Camera</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Side panel -->
+                    <aside class="sb-stack">
+                        <div class="sb-card">
+                            <h2 style="font-size:1.05rem;">Prediction history</h2>
+                            <ul id="history-list" class="sb-list sb-mt-3" aria-live="polite"></ul>
+                        </div>
+                        <div class="sb-card">
+                            <h2 style="font-size:1.05rem;">Tips for better accuracy</h2>
+                            <ul class="sb-list sb-mt-3 sb-muted" style="font-size:0.92rem;">
+                                <li class="sb-list__item">Face the camera with your palm visible</li>
+                                <li class="sb-list__item">Keep your hand inside the green box</li>
+                                <li class="sb-list__item">Use even, front lighting</li>
+                                <li class="sb-list__item">Plain backgrounds work best</li>
+                            </ul>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="sb-footer">
+        <div class="sb-container sb-footer__bottom" style="margin-top:0; border-top:0; padding-top:0;">
+            <span>© 2026 SignBridge AI</span>
+            <span>Processed locally · nothing leaves your machine</span>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile nav toggle
+        (function () {
+            var toggle = document.getElementById('nav-toggle');
+            var links = document.getElementById('nav-links');
+            if (!toggle || !links) return;
+            toggle.addEventListener('click', function () {
+                var open = links.classList.toggle('is-open');
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+        })();
+
+        let cameraStarted = false;
+        let updateInterval = null;
+        function startCamera() {
+            document.getElementById('video-feed').src = '/video_feed';
+            document.getElementById('detection-section').style.display = '';
+            document.getElementById('camera-controls').style.display = 'none';
+            cameraStarted = true;
+            updateInterval = setInterval(updatePrediction, 5000);
+        }
+        function stopCamera() {
+            fetch('/stop_camera').then(() => {
+                document.getElementById('video-feed').src = '';
+                document.getElementById('prediction').textContent = 'Prediction: None';
+                document.getElementById('confidence-bar').style.width = '0%';
+                document.getElementById('confidence-progress').setAttribute('aria-valuenow', '0');
+                document.getElementById('confidence-text').textContent = 'Confidence: 0%';
+                document.getElementById('detection-section').style.display = 'none';
+                document.getElementById('camera-controls').style.display = '';
+                cameraStarted = false;
+                if (updateInterval) clearInterval(updateInterval);
+            });
+        }
+        function clearWord() {
+            fetch('/clear_word', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        const fw = document.getElementById('formed-word');
+                        if (fw) fw.textContent = 'Word: None';
+                        lastWord = '';
+                    }
+                });
+        }
+        let lastWord = '';
+        function updatePrediction() {
+            fetch('/get_prediction')
+                .then(response => response.json())
+                .then(data => {
+                    const predictionEl = document.getElementById('prediction');
+                    predictionEl.textContent = data.current;
+
+                    const confidenceBar = document.getElementById('confidence-bar');
+                    const confidenceText = document.getElementById('confidence-text');
+                    const confidenceProgress = document.getElementById('confidence-progress');
+                    const confidence = data.confidence;
+                    confidenceBar.style.width = `${confidence}%`;
+                    confidenceProgress.setAttribute('aria-valuenow', String(Math.round(confidence)));
+                    confidenceText.textContent = `Confidence: ${confidence.toFixed(1)}%`;
+
+                    const historyList = document.getElementById('history-list');
+                    historyList.innerHTML = data.history.length ?
+                        data.history.map(item => `<li class="sb-list__item">${item}</li>`).join('') :
+                        '<li class="sb-list__item">No predictions yet</li>';
+
+                    const wordEl = document.getElementById('formed-word');
+                    if (wordEl) {
+                        wordEl.textContent = `Word: ${data.word || 'None'}`;
+                    }
+                    lastWord = data.word || '';
+                })
+                .catch(() => { /* transient network error - next poll retries */ });
+        }
+    </script>
+</body>
+</html>

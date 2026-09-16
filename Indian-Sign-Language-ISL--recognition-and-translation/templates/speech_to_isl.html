@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech to ISL | SignBridge AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/signbridge.css') }}">
+</head>
+<body>
+    <!-- Navbar -->
+    <header class="sb-nav">
+        <div class="sb-container sb-nav__inner">
+            <a class="sb-brand" href="/" aria-label="SignBridge AI home">
+                <span class="sb-brand__mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V6a1.5 1.5 0 0 1 3 0v4"/><path d="M10 10V4.5a1.5 1.5 0 0 1 3 0V10"/><path d="M13 10.5V6a1.5 1.5 0 0 1 3 0v6"/><path d="M16 12v-2a1.5 1.5 0 0 1 3 0v4a7 7 0 0 1-7 7h-1a7 7 0 0 1-7-7v-3a1.5 1.5 0 0 1 3 0"/></svg>
+                </span>
+                <span>SignBridge AI<span class="sb-brand__tag">Learn · Sign · Connect</span></span>
+            </a>
+            <nav aria-label="Primary">
+                <button class="sb-nav__toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle navigation menu">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                </button>
+                <ul class="sb-nav__links" id="nav-links">
+                    <li><a class="sb-nav__link" href="/">Home</a></li>
+                    <li><a class="sb-nav__link" href="/isl_detection">Live Recognition</a></li>
+                    <li><a class="sb-nav__link" href="/text_to_isl">Text to ISL</a></li>
+                    <li><a class="sb-nav__link" href="/speech_to_isl" aria-current="page">Speech to ISL</a></li>
+                    <li><a class="sb-nav__link" href="/tutorial">Tutorial</a></li>
+                    <li><a class="sb-nav__link" href="/feedback">Feedback</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Page head -->
+        <section class="sb-page-head">
+            <div class="sb-container">
+                <h1>Speech to ISL</h1>
+                <p>Speak a word or sentence and watch it become a finger-spelling sequence. Uses your browser's speech recognition — audio is not stored by this app.</p>
+            </div>
+        </section>
+
+        <!-- Speech to ISL Section -->
+        <section class="sb-section sb-section--tight">
+            <div class="sb-container">
+                <div class="sb-card" style="max-width: 860px; margin-inline: auto;">
+                    <div class="sb-text-center sb-mb-4">
+                        <button id="speech-btn" onclick="startSpeechRecognition()" class="sb-btn sb-btn--primary sb-btn--lg">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                            Start Speaking
+                        </button>
+                    </div>
+                    <p id="speech-text" class="sb-text-center" style="font-weight:700; color:var(--sb-white);">Recognized Text: None</p>
+                    <img id="speech-isl-image" src="" class="sb-media sb-mt-3" style="display:none;" alt="ISL finger-spelling sequence for the recognized speech">
+                    <p class="sb-help sb-text-center">Requires a browser with the Web Speech API (Chrome or Edge) and microphone permission.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="sb-footer">
+        <div class="sb-container sb-footer__bottom" style="margin-top:0; border-top:0; padding-top:0;">
+            <span>© 2026 SignBridge AI</span>
+            <span>Processed locally · nothing leaves your machine</span>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile nav toggle
+        (function () {
+            var toggle = document.getElementById('nav-toggle');
+            var links = document.getElementById('nav-links');
+            if (!toggle || !links) return;
+            toggle.addEventListener('click', function () {
+                var open = links.classList.toggle('is-open');
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+        })();
+
+        let recognition = null;
+        function startSpeechRecognition() {
+            const speechBtn = document.getElementById('speech-btn');
+            speechBtn.disabled = true;
+            speechBtn.textContent = 'Listening...';
+
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onresult = function(event) {
+                const text = event.results[0][0].transcript;
+                document.getElementById('speech-text').textContent = `Recognized Text: ${text}`;
+
+                fetch('/process_speech', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            document.getElementById('speech-text').textContent = `Error: ${data.error}`;
+                            document.getElementById('speech-isl-image').style.display = 'none';
+                        } else {
+                            document.getElementById('speech-text').textContent = `Recognized Text: ${data.text}`;
+                            const img = document.getElementById('speech-isl-image');
+                            img.src = data.image;
+                            img.style.display = '';
+                        }
+                    })
+                    .catch(error => {
+                        document.getElementById('speech-text').textContent = `Error: ${error}`;
+                        document.getElementById('speech-isl-image').style.display = 'none';
+                    });
+            };
+
+            recognition.onerror = function(event) {
+                let msg = event.error;
+                if (msg === 'not-allowed') {
+                    msg = 'Microphone access is blocked. Please allow microphone access in your browser settings and reload the page.';
+                }
+                document.getElementById('speech-text').textContent = `Error: ${msg}`;
+                document.getElementById('speech-isl-image').style.display = 'none';
+            };
+
+            recognition.onend = function() {
+                speechBtn.disabled = false;
+                speechBtn.textContent = 'Start Speaking';
+            };
+
+            recognition.start();
+        }
+    </script>
+</body>
+</html>

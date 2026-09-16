@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  compile-and-smoke:
+    name: Compile checks & route smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout (with LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Full runtime deps except: torch/transformers (optional sentiment
+          # feature - app degrades gracefully without them) and GUI OpenCV
+          # (replaced by the headless build, correct for CI).
+          grep -vE "^(torch|transformers|opencv-python)" requirements.txt | grep -vE "^(#|$)" > requirements-ci.txt
+          pip install -r requirements-ci.txt
+          pip install opencv-python-headless
+
+      - name: Python compile checks
+        run: |
+          python -m py_compile app.py isl_assets.py generate_alphabet_assets.py bilingual.py text_to_isl.py speech_to_isl.py train_model.py model_analysis.py predict.py realtime_detection.py translator.py variables.py text_splitter.py
+          echo "All Python files compile cleanly"
+
+      - name: Bilingual module self-test
+        run: python bilingual.py
+
+      - name: Alphabet asset check
+        run: python generate_alphabet_assets.py --check
+
+      - name: Flask route smoke tests
+        env:
+          TF_ENABLE_ONEDNN_OPTS: "0"
+          HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
+        run: |
+          python - <<'PY'
+          import json
+
+          # Import app without running the __main__ block.
+          # This also loads model.h5 (pulled via Git LFS in checkout).
+          import app as flask_app
+
+          client = flask_app.app.test_client()
+
+          # 1) GET every page route must return 200 HTML
+          page_routes = ["/", "/isl_detection", "/text_to_isl", "/speech_to_isl", "/tutorial", "/feedback"]
+          for route in page_routes:
+              resp = client.get(route)
+              assert resp.status_code == 200, f"{route} returned {resp.status_code}"
+              assert b"<html" in resp.data.lower(), f"{route} did not return HTML"
+              print(f"GET {route:20} -> 200 OK")
+
+          # 2) POST /process_text with valid English -> 200 with image
+          resp = client.post("/process_text", data=json.dumps({"text": "HELLO WORLD"}),
+                             content_type="application/json")
+          assert resp.status_code == 200, f"/process_text returned {resp.status_code}"
+          body = resp.get_json()
+          assert body.get("image", "").startswith("/static/isl_output/"), f"bad image path: {body}"
+          print(f"POST /process_text (HELLO WORLD) -> 200 OK, image: {body['image']}")
+
+          # 3) POST /process_text with unsupported characters -> 400
+          resp = client.post("/process_text", data=json.dumps({"text": "!!!@@@"}),
+                             content_type="application/json")
+          assert resp.status_code == 400, f"expected 400 for unsupported chars, got {resp.status_code}"
+          print("POST /process_text (!!!@@@)      -> 400 OK (graceful rejection)")
+
+          # 4) /get_prediction must return JSON without a camera attached
+          resp = client.get("/get_prediction")
+          assert resp.status_code == 200, f"/get_prediction returned {resp.status_code}"
+          data = resp.get_json()
+          assert "current" in data and "history" in data, f"unexpected payload: {list(data.keys())}"
+          print("GET /get_prediction               -> 200 OK (JSON)")
+
+          # 5) Tutorial API endpoints
+          resp = client.get("/get_tutorial_step/0")
+          assert resp.status_code == 200 and "letter" in resp.get_json()
+          resp = client.post("/reset_tutorial")
+          assert resp.status_code == 200
+          print("GET /get_tutorial_step/0 + POST /reset_tutorial -> 200 OK")
+
+          # 6) Feedback write + read round-trip
+          resp = client.post("/submit_feedback", data=json.dumps({"feedback": "CI smoke test"}),
+                             content_type="application/json")
+          assert resp.status_code == 200, f"/submit_feedback returned {resp.status_code}"
+          resp = client.get("/get_feedback")
+          assert resp.status_code == 200
+          items = resp.get_json()
+          assert any(item.get("feedback") == "CI smoke test" for item in items), "feedback not persisted"
+          print("POST /submit_feedback + GET /get_feedback -> 200 OK (round-trip)")
+
+          print()
+          print("ALL SMOKE TESTS PASSED")
+          PY

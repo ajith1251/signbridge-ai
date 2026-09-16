@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# Large data / model artifacts
+*.npy
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Caches
+.cache/
+.ipynb_checkpoints/
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+server.log
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
